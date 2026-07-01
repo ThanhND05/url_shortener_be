@@ -1,6 +1,7 @@
 package com.ThanhND05.url_shortener.common.config;
 
 import com.ThanhND05.url_shortener.common.security.CustomJwtAuthenticationConverter;
+import com.ThanhND05.url_shortener.common.security.JwtBlacklistValidator;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,11 +12,10 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -39,9 +39,11 @@ import java.util.List;
 public class SecurityConfig {
 
     private final AppProperties appProperties;
+    private final JwtBlacklistValidator jwtBlacklistValidator;
 
-    public SecurityConfig(AppProperties appProperties) {
+    public SecurityConfig(AppProperties appProperties, JwtBlacklistValidator jwtBlacklistValidator) {
         this.appProperties = appProperties;
+        this.jwtBlacklistValidator = jwtBlacklistValidator;
     }
 
     // ── Security Filter Chain ────────────────────────────
@@ -56,6 +58,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Public: auth endpoints
                 .requestMatchers("/api/v1/auth/**").permitAll()
+                // Public: VNPay callback endpoints (IPN + Return URL)
+                .requestMatchers("/api/v1/billing/vnpay-ipn", "/api/v1/billing/vnpay-return").permitAll()
                 // Public: redirect short URLs
                 .requestMatchers(HttpMethod.GET, "/r/**").permitAll()
                 // Public: actuator health
@@ -83,9 +87,20 @@ public class SecurityConfig {
     @Bean
     public JwtDecoder jwtDecoder() {
         SecretKey key = getSecretKey();
-        return NimbusJwtDecoder.withSecretKey(key)
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(key)
                 .macAlgorithm(MacAlgorithm.HS256)
                 .build();
+
+        // Thêm blacklist validator vào chuỗi validation:
+        // 1. JwtTimestampValidator — check exp/nbf (mặc định)
+        // 2. JwtBlacklistValidator — check JTI có trong blacklist (Redis → DB)
+        OAuth2TokenValidator<Jwt> validators = new DelegatingOAuth2TokenValidator<>(
+                new JwtTimestampValidator(),
+                jwtBlacklistValidator
+        );
+        decoder.setJwtValidator(validators);
+
+        return decoder;
     }
 
     private SecretKey getSecretKey() {

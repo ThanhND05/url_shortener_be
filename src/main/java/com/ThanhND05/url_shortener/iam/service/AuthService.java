@@ -15,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,9 +50,9 @@ import java.util.stream.Collectors;
  * 3. Nếu token ĐÃ bị revoke → phát hiện reuse → revoke TOÀN BỘ family.
  * 4. Nếu hợp lệ → revoke token cũ, tạo token mới (cùng family_id + session_id).
  *
- * === FLOW LOGOUT ===
- * - Logout đơn: revoke refresh token hiện tại.
- * - Logout tất cả: revoke tất cả refresh tokens của user.
+ * === FLOW LOGOUT (ĐÃ TỐI ƯU) ===
+ * - Logout đơn: revoke refresh token + blacklist access token hiện tại (Redis + DB).
+ * - Logout tất cả: revoke tất cả refresh tokens + blacklist access token hiện tại.
  */
 @Slf4j
 @Service
@@ -63,6 +65,8 @@ public class AuthService {
     private final UserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
+    private final JwtDecoder jwtDecoder;
+    private final TokenBlacklistService tokenBlacklistService;
     private final ApplicationEventPublisher eventPublisher;
 
     // ── ĐĂNG KÝ ──────────────────────────────────────────
@@ -152,20 +156,67 @@ public class AuthService {
 
     // ── LOGOUT ────────────────────────────────────────────
 
+    /**
+     * Logout đơn — revoke refresh token + blacklist access token hiện tại.
+     *
+     * @param refreshTokenValue refresh token raw value từ client
+     * @param accessTokenValue  access token raw value từ header Authorization
+     */
     @Transactional
-    public void logout(String refreshTokenValue) {
+    public void logout(String refreshTokenValue, String accessTokenValue) {
+        // 1. Revoke refresh token trong DB
         String tokenHash = HashUtil.sha256Hex(refreshTokenValue);
         refreshTokenRepository.findByTokenHash(tokenHash)
                 .ifPresent(token -> {
                     token.revoke("LOGOUT");
                     refreshTokenRepository.save(token);
                 });
+
+        // 2. Blacklist access token hiện tại → vô hiệu hóa ngay lập tức
+        blacklistAccessToken(accessTokenValue, "LOGOUT");
     }
 
+    /**
+     * Logout tất cả — revoke toàn bộ refresh tokens + blacklist access token hiện tại.
+     *
+     * @param userId           ID của user
+     * @param accessTokenValue access token raw value từ header Authorization
+     */
     @Transactional
-    public void logoutAll(UUID userId) {
+    public void logoutAll(UUID userId, String accessTokenValue) {
+        // 1. Revoke tất cả refresh tokens của user
         refreshTokenRepository.revokeAllByUserId(userId, Instant.now(), "LOGOUT_ALL");
         log.info("All sessions revoked for user {}", userId);
+
+        // 2. Blacklist access token hiện tại
+        blacklistAccessToken(accessTokenValue, "LOGOUT_ALL");
+    }
+
+    /**
+     * Trích xuất thông tin từ access token và đưa vào blacklist (Redis + DB).
+     *
+     * @param accessTokenValue raw JWT string
+     * @param reason           lý do blacklist
+     */
+    private void blacklistAccessToken(String accessTokenValue, String reason) {
+        if (accessTokenValue == null || accessTokenValue.isBlank()) {
+            log.warn("Không có access token để blacklist. Bỏ qua.");
+            return;
+        }
+
+        try {
+            Jwt jwt = jwtDecoder.decode(accessTokenValue);
+            UUID jti = UUID.fromString(jwt.getId());
+            UUID userId = UUID.fromString(jwt.getSubject());
+            Instant expiresAt = jwt.getExpiresAt();
+
+            tokenBlacklistService.blacklist(jti, userId, expiresAt, reason);
+            log.info("Access token {} blacklisted (reason: {})", jti, reason);
+        } catch (Exception e) {
+            // Nếu decode lỗi (token hết hạn, sai format...) → bỏ qua
+            // Vì token lỗi thì cũng không dùng được nữa
+            log.warn("Không thể blacklist access token: {}", e.getMessage());
+        }
     }
 
     // ── PRIVATE HELPERS ───────────────────────────────────

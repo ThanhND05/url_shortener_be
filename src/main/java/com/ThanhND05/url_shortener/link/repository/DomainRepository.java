@@ -20,6 +20,9 @@ public interface DomainRepository extends JpaRepository<Domain, Long> {
     /** Tìm domain mặc định của user — mỗi user chỉ có tối đa 1. */
     Optional<Domain> findByOwnerIdAndIsDefaultTrue(UUID ownerId);
 
+    /** Tìm domain mặc định của hệ thống (owner = null) */
+    Optional<Domain> findByOwnerIdIsNullAndIsDefaultTrue();
+
     Page<Domain> findByOwnerIdAndStatusNot(UUID ownerId, DomainStatus status, Pageable pageable);
 
     boolean existsByDomain(String domain);

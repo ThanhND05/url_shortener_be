@@ -6,6 +6,9 @@ import lombok.*;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 /**
  * Entity đại diện cho bảng analytics.click_events — ghi nhận mỗi lượt click.
  *
@@ -122,6 +125,7 @@ public class ClickEvent {
     private Integer latencyMs;
 
     /** Custom metadata mở rộng (JSONB). */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "metadata", columnDefinition = "jsonb", nullable = false)
     @Builder.Default
     private String metadata = "{}";

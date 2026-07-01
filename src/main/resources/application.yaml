@@ -29,7 +29,7 @@ spring:
     enabled: true
     locations: classpath:db/migration
     default-schema: public
-    schemas: public,iam,link,analytics,platform
+    schemas: public,iam,link,analytics,platform,billing
     baseline-on-migrate: true
 
   # ── Redis ──────────────────────────────────────────────
@@ -58,6 +58,11 @@ app:
     refresh-token-expiration-ms: 604800000    # 7 ngày
   cors:
     allowed-origins: http://localhost:3000,http://localhost:5173
+  vnpay:
+    tmn-code: NZCRQJ6U                  # Thay bằng mã từ VNPay Sandbox
+    hash-secret: Q4K67KVGHMSZK5DKM3RHXPEM2U185SHD            # Thay bằng secret từ VNPay Sandbox
+    pay-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+    return-url: https://splicing-lid-parrot.ngrok-free.dev/api/v1/billing/vnpay-return
 
 # ── Logging ────────────────────────────────────────────
 logging:

@@ -51,17 +51,6 @@ public class JwtProvider {
     }
 
     /**
-     * Extract the JTI (JWT ID) from a raw token string.
-     * Used when blacklisting an access token on password change / logout.
-     */
-    public String extractJti(String token) {
-        // JwtDecoder is used by the framework; here we just parse the claims
-        // For extracting JTI from a raw token, the caller should use JwtDecoder
-        // and then jwt.getId(). This method is a convenience.
-        return null; // Implemented via JwtDecoder in AuthService
-    }
-
-    /**
      * Generate a random refresh token value (NOT a JWT).
      * The raw value is returned to the client; the hash is stored in DB.
      */

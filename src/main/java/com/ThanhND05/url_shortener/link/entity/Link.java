@@ -4,6 +4,9 @@ import com.ThanhND05.url_shortener.link.enums.LinkStatus;
 import com.ThanhND05.url_shortener.link.enums.ShortCodeType;
 import jakarta.persistence.*;
 import lombok.*;
+
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -18,9 +21,12 @@ import java.util.UUID;
  *
  * Cơ chế hoạt động:
  * 1. User tạo link → server sinh short_code (Base62 từ sequence hoặc custom).
- * 2. Lưu vào bảng links (đầy đủ metadata) + sync vào redirect_lookup (denormalized, cho hot path).
- * 3. Khi có click → RedirectService đọc từ redirect_lookup (nhanh), không đọc bảng links.
- * 4. click_count và last_clicked_at được cập nhật bất đồng bộ (từ analytics module).
+ * 2. Lưu vào bảng links (đầy đủ metadata) + sync vào redirect_lookup
+ * (denormalized, cho hot path).
+ * 3. Khi có click → RedirectService đọc từ redirect_lookup (nhanh), không đọc
+ * bảng links.
+ * 4. click_count và last_clicked_at được cập nhật bất đồng bộ (từ analytics
+ * module).
  *
  * Các trường đặc biệt:
  * - public_id (UUID): expose ra API thay vì internal BIGINT id.
@@ -33,7 +39,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "links", schema = "link")
 @EntityListeners(AuditingEntityListener.class)
-@Getter @Setter
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -50,7 +57,10 @@ public class Link {
     @Column(name = "owner_id")
     private UUID ownerId;
 
-    /** FK tới domain — xác định prefix URL (VD: domain "go.site.vn" + code "abc" → go.site.vn/abc). */
+    /**
+     * FK tới domain — xác định prefix URL (VD: domain "go.site.vn" + code "abc" →
+     * go.site.vn/abc).
+     */
     @Column(name = "domain_id", nullable = false)
     private Long domainId;
 
@@ -117,6 +127,7 @@ public class Link {
     private String passwordHash;
 
     /** Dữ liệu mở rộng (JSONB): UTM params, custom fields, ... */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "metadata", columnDefinition = "jsonb", nullable = false)
     @Builder.Default
     private String metadata = "{}";
@@ -132,11 +143,7 @@ public class Link {
 
     /** Tags gắn vào link — quan hệ M:N qua bảng link.link_tags. */
     @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "link_tags", schema = "link",
-            joinColumns = @JoinColumn(name = "link_id"),
-            inverseJoinColumns = @JoinColumn(name = "tag_id")
-    )
+    @JoinTable(name = "link_tags", schema = "link", joinColumns = @JoinColumn(name = "link_id"), inverseJoinColumns = @JoinColumn(name = "tag_id"))
     @Builder.Default
     private Set<Tag> tags = new HashSet<>();
 

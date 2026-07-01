@@ -5,6 +5,7 @@ import com.ThanhND05.url_shortener.iam.dto.request.*;
 import com.ThanhND05.url_shortener.iam.dto.response.*;
 import com.ThanhND05.url_shortener.iam.service.AuthService;
 import com.ThanhND05.url_shortener.common.security.SecurityUtils;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -63,23 +64,40 @@ public class AuthController {
     }
 
     /**
-     * LOGOUT — revoke refresh token hiện tại (một device).
+     * LOGOUT — revoke refresh token + blacklist access token hiện tại (một device).
      * Yêu cầu authenticated (gửi access token trong header).
      */
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(
-            @RequestBody RefreshTokenRequest request) {
-        authService.logout(request.refreshToken());
+            @RequestBody RefreshTokenRequest request,
+            HttpServletRequest httpRequest) {
+        String accessToken = extractBearerToken(httpRequest);
+        authService.logout(request.refreshToken(), accessToken);
         return ResponseEntity.ok(ApiResponse.ok(null, "Đăng xuất thành công."));
     }
 
     /**
-     * LOGOUT TẤT CẢ — revoke toàn bộ refresh tokens (tất cả devices).
+     * LOGOUT TẤT CẢ — revoke toàn bộ refresh tokens + blacklist access token (tất cả devices).
      * Yêu cầu authenticated.
      */
     @PostMapping("/logout-all")
-    public ResponseEntity<ApiResponse<Void>> logoutAll() {
-        authService.logoutAll(SecurityUtils.getCurrentUserId());
+    public ResponseEntity<ApiResponse<Void>> logoutAll(HttpServletRequest httpRequest) {
+        String accessToken = extractBearerToken(httpRequest);
+        authService.logoutAll(SecurityUtils.getCurrentUserId(), accessToken);
         return ResponseEntity.ok(ApiResponse.ok(null, "Đã đăng xuất tất cả thiết bị."));
+    }
+
+    // ── PRIVATE HELPERS ─────────────────────────────────
+
+    /**
+     * Trích xuất Bearer token từ header Authorization.
+     * Trả về raw JWT string (không có prefix "Bearer ").
+     */
+    private String extractBearerToken(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authHeader.substring(7);
+        }
+        return null;
     }
 }

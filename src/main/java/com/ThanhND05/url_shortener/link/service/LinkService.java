@@ -226,7 +226,8 @@ public class LinkService {
             return domain;
         }
         return domainRepository.findByOwnerIdAndIsDefaultTrue(ownerId)
-                .orElseThrow(() -> new BusinessException("Bạn chưa có domain mặc định. Vui lòng tạo domain trước."));
+                .orElseGet(() -> domainRepository.findByOwnerIdIsNullAndIsDefaultTrue()
+                        .orElseThrow(() -> new BusinessException("Hệ thống chưa cấu hình domain mặc định.")));
     }
 
     /**
