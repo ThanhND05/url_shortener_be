@@ -21,6 +21,10 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        jdbc:
+          batch_size: 50             # Gom 50 INSERT thành 1 JDBC batch call
+        order_inserts: true          # Sắp xếp INSERT theo entity type → batch hiệu quả hơn
+        order_updates: true
     show-sql: false
     open-in-view: false
 
@@ -43,6 +47,22 @@ spring:
   # Dùng 'simple' (in-memory) khi chưa có Redis, chuyển sang 'redis' khi đã cài Redis
   cache:
     type: redis
+
+  # ── Kafka ─────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: url-shortener-group
+      auto-offset-reset: earliest
+      # Batch consumer: gom tối đa 500 records trước khi xử lý
+      max-poll-records: 500
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.ThanhND05.url_shortener.*
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
 # ── Server ─────────────────────────────────────────────
 server:
