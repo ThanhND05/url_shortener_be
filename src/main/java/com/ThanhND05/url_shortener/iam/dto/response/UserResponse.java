@@ -4,6 +4,7 @@ import com.ThanhND05.url_shortener.iam.entity.User;
 import lombok.Builder;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -17,7 +18,8 @@ public record UserResponse(
         String displayName,
         String avatarUrl,
         String status,
-        Instant createdAt
+        Instant createdAt,
+        List<String> roles
 ) {
     /** Convert từ User entity sang DTO — loại bỏ thông tin nhạy cảm. */
     public static UserResponse from(User user) {
@@ -28,6 +30,9 @@ public record UserResponse(
                 .avatarUrl(user.getAvatarUrl())
                 .status(user.getStatus().name())
                 .createdAt(user.getCreatedAt())
+                .roles(user.getRoles() == null ? List.of() : user.getRoles().stream()
+                        .map(ur -> ur.getRole().getName())
+                        .toList())
                 .build();
     }
 }

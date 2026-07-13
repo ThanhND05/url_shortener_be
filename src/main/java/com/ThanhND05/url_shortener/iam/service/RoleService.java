@@ -7,6 +7,7 @@ import com.ThanhND05.url_shortener.iam.entity.*;
 import com.ThanhND05.url_shortener.iam.enums.ScopeType;
 import com.ThanhND05.url_shortener.iam.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,16 +17,19 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Service quản lý Role và Permission.
+ * Service quản lý Role.
  *
  * Chức năng chính:
- * - Liệt kê roles + permissions.
- * - Tạo custom role (is_system = false), gán permissions.
+ * - CRUD roles (tạo, xem, sửa, xóa).
+ * - Gán permissions cho role.
  * - Gán role cho user (có scope: GLOBAL hoặc WORKSPACE).
  * - Tải effective permissions của user (flatten từ tất cả roles).
  *
- * Lưu ý: System roles (super_admin, admin, member, viewer) không được xóa/sửa tên.
+ * Lưu ý:
+ * - System roles (super_admin, admin, member, viewer) không được xóa hoặc đổi tên.
+ * - Permission CRUD đã tách riêng sang PermissionService.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RoleService {
@@ -37,6 +41,7 @@ public class RoleService {
 
     // ── LIỆT KÊ ──────────────────────────────────────────
 
+    /** Liệt kê tất cả roles kèm permissions. */
     @Transactional(readOnly = true)
     public List<RoleResponse> getAllRoles() {
         return roleRepository.findAll().stream()
@@ -44,9 +49,12 @@ public class RoleService {
                 .collect(Collectors.toList());
     }
 
+    /** Xem chi tiết role theo ID. */
     @Transactional(readOnly = true)
-    public List<Permission> getAllPermissions() {
-        return permissionRepository.findAll();
+    public RoleResponse getRoleById(Long id) {
+        Role role = roleRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Role", "id", id));
+        return RoleResponse.from(role);
     }
 
     // ── TẠO CUSTOM ROLE ───────────────────────────────────
@@ -70,6 +78,42 @@ public class RoleService {
         return RoleResponse.from(role);
     }
 
+    // ── CẬP NHẬT ROLE ─────────────────────────────────────
+
+    /**
+     * Cập nhật thông tin role (name, displayName, description).
+     * System roles không được đổi tên (name).
+     */
+    @Transactional
+    public RoleResponse updateRole(Long id, UpdateRoleRequest request) {
+        Role role = roleRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Role", "id", id));
+
+        // System roles không được đổi tên
+        if (request.name() != null && !request.name().isBlank()) {
+            if (role.isSystem()) {
+                throw new BusinessException("Không thể đổi tên system role: " + role.getName());
+            }
+            // Kiểm tra tên mới không trùng
+            if (!request.name().equals(role.getName())
+                    && roleRepository.findByName(request.name()).isPresent()) {
+                throw new DuplicateResourceException("Role", "name", request.name());
+            }
+            role.setName(request.name());
+        }
+
+        if (request.displayName() != null) {
+            role.setDisplayName(request.displayName());
+        }
+        if (request.description() != null) {
+            role.setDescription(request.description());
+        }
+
+        role = roleRepository.save(role);
+        log.info("Role updated: {}", role.getName());
+        return RoleResponse.from(role);
+    }
+
     // ── GÁN PERMISSIONS CHO ROLE ──────────────────────────
 
     /** Cập nhật danh sách permissions của role (thay thế toàn bộ). */
@@ -80,6 +124,46 @@ public class RoleService {
         role.setPermissions(resolvePermissions(permissionSlugs));
         role = roleRepository.save(role);
         return RoleResponse.from(role);
+    }
+
+    // ── XÓA ROLE ──────────────────────────────────────────
+
+    /**
+     * Xóa role theo ID.
+     *
+     * Quy tắc:
+     * - System roles (is_system = true) KHÔNG được phép xóa.
+     * - Nếu role đang được gán cho users và force = false → báo lỗi.
+     * - Nếu force = true → xóa tất cả user_role assignments trước, rồi xóa role.
+     */
+    @Transactional
+    public void deleteRole(Long id, boolean force) {
+        Role role = roleRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Role", "id", id));
+
+        // System roles không được xóa
+        if (role.isSystem()) {
+            throw new BusinessException(
+                    "Không thể xóa system role: " + role.getName()
+                    + ". System roles (super_admin, admin, member, viewer) được bảo vệ.");
+        }
+
+        // Kiểm tra role có đang được gán cho users
+        boolean inUse = userRoleRepository.existsByRoleId(id);
+        if (inUse && !force) {
+            throw new BusinessException(
+                    "Role '" + role.getName() + "' đang được gán cho users. "
+                    + "Thêm query param ?force=true để xóa role và gỡ khỏi tất cả users.");
+        }
+
+        // Force delete: gỡ role khỏi tất cả users trước
+        if (inUse) {
+            userRoleRepository.deleteByRoleId(id);
+            log.warn("Force deleted all user assignments for role: {}", role.getName());
+        }
+
+        roleRepository.delete(role);
+        log.info("Role deleted: {} (id={})", role.getName(), id);
     }
 
     // ── GÁN ROLE CHO USER ─────────────────────────────────

@@ -28,4 +28,60 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, ClickEve
         ORDER BY ce.linkId, ce.occurredAt
     """)
     List<ClickEvent> findEventsInRange(Instant from, Instant to);
+
+    // ── ADMIN AGGREGATE QUERIES ──────────────────────────
+
+    /** Tổng click events toàn hệ thống trong khoảng thời gian. */
+    long countByOccurredAtBetween(Instant from, Instant to);
+
+    /** Breakdown theo device type (mobile, desktop, tablet). */
+    @Query("""
+        SELECT ce.deviceType, COUNT(ce) FROM ClickEvent ce
+        WHERE ce.occurredAt >= :from AND ce.occurredAt < :to
+          AND ce.deviceType IS NOT NULL
+        GROUP BY ce.deviceType
+        ORDER BY COUNT(ce) DESC
+    """)
+    List<Object[]> countByDeviceType(Instant from, Instant to);
+
+    /** Breakdown theo OS. */
+    @Query("""
+        SELECT ce.os, COUNT(ce) FROM ClickEvent ce
+        WHERE ce.occurredAt >= :from AND ce.occurredAt < :to
+          AND ce.os IS NOT NULL
+        GROUP BY ce.os
+        ORDER BY COUNT(ce) DESC
+    """)
+    List<Object[]> countByOs(Instant from, Instant to);
+
+    /** Breakdown theo browser. */
+    @Query("""
+        SELECT ce.browser, COUNT(ce) FROM ClickEvent ce
+        WHERE ce.occurredAt >= :from AND ce.occurredAt < :to
+          AND ce.browser IS NOT NULL
+        GROUP BY ce.browser
+        ORDER BY COUNT(ce) DESC
+    """)
+    List<Object[]> countByBrowser(Instant from, Instant to);
+
+    /** Breakdown theo quốc gia. */
+    @Query("""
+        SELECT ce.countryCode, COUNT(ce) FROM ClickEvent ce
+        WHERE ce.occurredAt >= :from AND ce.occurredAt < :to
+          AND ce.countryCode IS NOT NULL
+        GROUP BY ce.countryCode
+        ORDER BY COUNT(ce) DESC
+    """)
+    List<Object[]> countByCountry(Instant from, Instant to);
+
+    /** Breakdown theo nguồn referrer. */
+    @Query("""
+        SELECT ce.refererDomain, COUNT(ce) FROM ClickEvent ce
+        WHERE ce.occurredAt >= :from AND ce.occurredAt < :to
+          AND ce.refererDomain IS NOT NULL
+        GROUP BY ce.refererDomain
+        ORDER BY COUNT(ce) DESC
+    """)
+    List<Object[]> countByReferrer(Instant from, Instant to);
 }
+

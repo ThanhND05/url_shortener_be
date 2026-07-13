@@ -76,8 +76,13 @@ app:
     secret: url-shortener-jwt-secret-key-change-this-in-production-2026-thanhnd05
     access-token-expiration-ms: 900000        # 15 phút
     refresh-token-expiration-ms: 604800000    # 7 ngày
+  admin:
+    super-admin-email: ${SUPER_ADMIN_EMAIL:superadmin@admin.com}
+    super-admin-password: ${SUPER_ADMIN_PASSWORD:123456aA@}
+    admin-email: ${ADMIN_EMAIL:admin@admin.com}
+    admin-password: ${ADMIN_PASSWORD:123456aA@}
   cors:
-    allowed-origins: http://localhost:3000,http://localhost:5173
+    allowed-origins: http://localhost:3000
   vnpay:
     tmn-code: NZCRQJ6U                  # Thay bằng mã từ VNPay Sandbox
     hash-secret: Q4K67KVGHMSZK5DKM3RHXPEM2U185SHD            # Thay bằng secret từ VNPay Sandbox

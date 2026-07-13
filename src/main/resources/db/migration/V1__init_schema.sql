@@ -11,7 +11,7 @@ CREATE SCHEMA IF NOT EXISTS iam;
 CREATE SCHEMA IF NOT EXISTS link;
 CREATE SCHEMA IF NOT EXISTS analytics;
 CREATE SCHEMA IF NOT EXISTS platform;
-
+CREATE SCHEMA IF NOT EXISTS billing;
 
 -- =========================================================
 -- IAM
@@ -23,8 +23,6 @@ CREATE TABLE iam.users (
     password_hash   TEXT        NOT NULL,
     display_name    VARCHAR(150),
     avatar_url      TEXT,
-    system_role     VARCHAR(30) NOT NULL DEFAULT 'USER'
-        CHECK (system_role IN ('USER', 'SUPER_ADMIN')),
     status          VARCHAR(30) NOT NULL DEFAULT 'ACTIVE'
         CHECK (status IN ('ACTIVE', 'LOCKED', 'DELETED')),
     deleted_at      TIMESTAMPTZ,
@@ -34,6 +32,7 @@ CREATE TABLE iam.users (
 
 CREATE INDEX ix_users_status     ON iam.users(status) WHERE status != 'DELETED';
 CREATE INDEX ix_users_deleted_at ON iam.users(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX ix_users_created_at ON iam.users(created_at DESC);
 
 
 CREATE TABLE iam.refresh_tokens (
@@ -58,15 +57,18 @@ CREATE INDEX ix_refresh_tokens_expires_at ON iam.refresh_tokens(expires_at)
     WHERE revoked_at IS NULL;
 
 
-CREATE TABLE iam.token_blacklist (
-    jti         UUID        PRIMARY KEY,
-    user_id     UUID        NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
-    expires_at  TIMESTAMPTZ NOT NULL,
+CREATE TABLE IF NOT EXISTS iam.token_blacklist (
+    jti         UUID            PRIMARY KEY,
+    user_id     UUID            NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
+    expires_at  TIMESTAMPTZ     NOT NULL,
     reason      VARCHAR(80)
 );
 
-CREATE INDEX ix_token_blacklist_user_id    ON iam.token_blacklist(user_id);
-CREATE INDEX ix_token_blacklist_expires_at ON iam.token_blacklist(expires_at);
+-- Index để cleanup job xóa các entry đã hết hạn
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires_at ON iam.token_blacklist(expires_at);
+
+-- Index để tìm tất cả blacklisted tokens của 1 user (dùng khi check bảo mật hoặc logout-all nếu cần)
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_user_id ON iam.token_blacklist(user_id);
 
 
 CREATE TABLE iam.roles (
@@ -122,6 +124,35 @@ CREATE TABLE iam.role_permissions (
 );
 
 CREATE INDEX ix_role_permissions_permission_id ON iam.role_permissions(permission_id);
+
+-- Gán toàn bộ 15 quyền (từ 1 đến 15) cho Super Admin (role_id = 1)
+INSERT INTO iam.role_permissions (role_id, permission_id)
+SELECT 1, id FROM iam.permissions
+ON CONFLICT DO NOTHING;
+
+-- Gán quyền cho Admin (role_id = 2) - Gán tất cả trừ quản lý user và billing
+INSERT INTO iam.role_permissions (role_id, permission_id)
+SELECT 2, id FROM iam.permissions 
+WHERE resource NOT IN ('user', 'billing')
+ON CONFLICT DO NOTHING;
+
+-- Gán quyền cho Member (role_id = 3) - Được tạo, sửa, xóa link, domain và xem thống kê
+INSERT INTO iam.role_permissions (role_id, permission_id) VALUES
+    (3, 1),  -- link:create
+    (3, 2),  -- link:read
+    (3, 3),  -- link:update
+    (3, 4),  -- link:delete
+    (3, 6),  -- domain:create
+    (3, 7),  -- domain:read
+    (3, 10)  -- analytics:read
+ON CONFLICT DO NOTHING;
+
+-- Gán quyền cho Viewer (role_id = 4) - Chỉ được xem
+INSERT INTO iam.role_permissions (role_id, permission_id) VALUES
+    (4, 2),  -- link:read
+    (4, 7),  -- domain:read
+    (4, 10)  -- analytics:read
+ON CONFLICT DO NOTHING;
 
 
 CREATE TABLE iam.user_roles (
@@ -203,6 +234,12 @@ CREATE UNIQUE INDEX ux_domains_owner_default ON link.domains(owner_id) WHERE is_
 
 CREATE SEQUENCE link.short_code_seq START WITH 100000 INCREMENT BY 1;
 
+-- Tạo một system domain mặc định để hệ thống có thể tạo link rút gọn
+INSERT INTO link.domains (domain, is_default, status, verified_at)
+VALUES ('localhost:8080', true, 'ACTIVE', now())
+ON CONFLICT DO NOTHING;
+
+
 
 CREATE TABLE link.links (
     id                         BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -214,7 +251,7 @@ CREATE TABLE link.links (
         CHECK (short_code_type IN ('GENERATED', 'CUSTOM')),
     original_url               TEXT        NOT NULL,
     normalized_url             TEXT,
-    original_url_hash          CHAR(64),
+    original_url_hash          VARCHAR(64),
     title                      VARCHAR(255),
     description                TEXT,
     status                     VARCHAR(30) NOT NULL DEFAULT 'ACTIVE'
@@ -303,61 +340,76 @@ CREATE TABLE link.link_tags (
 -- ANALYTICS
 -- =========================================================
 
-CREATE TABLE analytics.click_events (
-    event_id        UUID        NOT NULL DEFAULT gen_random_uuid(),
-    link_id         BIGINT,
-    link_public_id  UUID,
-    domain_id       BIGINT,
-    short_code      VARCHAR(64),
-    occurred_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    ip_hash         BYTEA,
-    visitor_hash    BYTEA,
-    user_agent_hash BYTEA,
-    referer         TEXT,
-    referer_domain  VARCHAR(255),
-    country_code    CHAR(2),
-    region          VARCHAR(100),
-    city            VARCHAR(100),
-    device_type     VARCHAR(30),
-    os              VARCHAR(80),
-    browser         VARCHAR(80),
-    is_bot          BOOLEAN     NOT NULL DEFAULT false,
-    request_id      UUID,
-    http_status     SMALLINT,
-    latency_ms      INT,
-    metadata        JSONB       NOT NULL DEFAULT '{}',
-    PRIMARY KEY (occurred_at, event_id)
+CREATE TABLE IF NOT EXISTS analytics.click_events (
+    event_id                   UUID            NOT NULL DEFAULT gen_random_uuid(),
+    link_id                    BIGINT,
+    link_public_id             UUID,
+    domain_id                  BIGINT,
+    short_code                 VARCHAR(64),
+    occurred_at                TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    ip_hash                    BYTEA,
+    visitor_hash               BYTEA,
+    user_agent_hash            BYTEA,
+    referer                    TEXT,
+    referer_domain             VARCHAR(255),
+    country_code               VARCHAR(2),     -- Đã cập nhật thành VARCHAR(2) chuẩn theo DB hiện tại
+    region                     VARCHAR(100),
+    city                       VARCHAR(100),
+    device_type                VARCHAR(30),
+    os                         VARCHAR(80),
+    browser                    VARCHAR(80),
+    is_bot                     BOOLEAN         NOT NULL DEFAULT false,
+    request_id                 UUID,
+    http_status                SMALLINT,
+    latency_ms                 INTEGER,
+    metadata                   JSONB           NOT NULL DEFAULT '{}'::jsonb,
+
+    -- Khóa chính trên bảng phân vùng bắt buộc phải chứa cột phân vùng (occurred_at)
+    CONSTRAINT click_events_pkey PRIMARY KEY (occurred_at, event_id)
 ) PARTITION BY RANGE (occurred_at);
 
-CREATE TABLE analytics.click_events_2026_06
-    PARTITION OF analytics.click_events
-    FOR VALUES FROM ('2026-06-01') TO ('2026-07-01');
+-- Hệ thống Index tối ưu cho việc truy vấn log/analytics
 
-CREATE INDEX ix_click_events_link_time  ON analytics.click_events(link_id, occurred_at DESC);
-CREATE INDEX ix_click_events_code_time  ON analytics.click_events(domain_id, short_code, occurred_at DESC);
-CREATE INDEX ix_click_events_time_brin  ON analytics.click_events USING BRIN(occurred_at);
-CREATE INDEX ix_click_events_country    ON analytics.click_events(country_code);
-CREATE INDEX ix_click_events_device     ON analytics.click_events(device_type);
+-- 1. Index phục vụ lấy log click theo domain và short_code (sắp xếp theo thời gian mới nhất)
+CREATE INDEX IF NOT EXISTS ix_click_events_code_time 
+ON analytics.click_events (domain_id, short_code, occurred_at DESC NULLS FIRST);
+
+-- 2. Index lấy log click theo link cụ thể
+CREATE INDEX IF NOT EXISTS ix_click_events_link_time 
+ON analytics.click_events (link_id, occurred_at DESC NULLS FIRST);
+
+-- 3. BRIN Index tối ưu cực mạnh cho việc quét dữ liệu theo khoảng thời gian lớn (Time-series)
+CREATE INDEX IF NOT EXISTS ix_click_events_time_brin 
+ON analytics.click_events USING BRIN (occurred_at);
+
+-- 4. Index thống kê theo quốc gia
+CREATE INDEX IF NOT EXISTS ix_click_events_country 
+ON analytics.click_events (country_code);
+
+-- 5. Index thống kê theo loại thiết bị
+CREATE INDEX IF NOT EXISTS ix_click_events_device 
+ON analytics.click_events (device_type);
 
 
-CREATE TABLE analytics.click_agg_minute (
-    link_id         BIGINT      NOT NULL,
-    bucket_minute   TIMESTAMPTZ NOT NULL,
-    total_clicks    BIGINT      NOT NULL DEFAULT 0,
-    unique_visitors BIGINT      NOT NULL DEFAULT 0,
-    bot_clicks      BIGINT      NOT NULL DEFAULT 0,
-    country_counts  JSONB       NOT NULL DEFAULT '{}',
-    device_counts   JSONB       NOT NULL DEFAULT '{}',
-    referrer_counts JSONB       NOT NULL DEFAULT '{}',
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (link_id, bucket_minute)
+-- 1. Khởi tạo bảng mẹ (Bảng này sẽ được phân vùng theo Range của cột bucket_minute)
+CREATE TABLE IF NOT EXISTS analytics.click_agg_minute (
+    link_id          BIGINT                      NOT NULL,
+    bucket_minute    TIMESTAMP WITH TIME ZONE    NOT NULL,
+    total_clicks     BIGINT                      NOT NULL DEFAULT 0,
+    unique_visitors  BIGINT                      NOT NULL DEFAULT 0,
+    bot_clicks       BIGINT                      NOT NULL DEFAULT 0,
+    country_counts   JSONB                       NOT NULL DEFAULT '{}'::jsonb,
+    device_counts    JSONB                       NOT NULL DEFAULT '{}'::jsonb,
+    referrer_counts  JSONB                       NOT NULL DEFAULT '{}'::jsonb,
+    updated_at       TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now(),
+    
+    -- Khóa chính bắt buộc phải bao gồm cả cột dùng để phân vùng (bucket_minute)
+    CONSTRAINT click_agg_minute_pkey PRIMARY KEY (link_id, bucket_minute)
 ) PARTITION BY RANGE (bucket_minute);
 
-CREATE TABLE analytics.click_agg_minute_current
-    PARTITION OF analytics.click_agg_minute
-    FOR VALUES FROM (CURRENT_DATE - INTERVAL '7 days') TO (CURRENT_DATE + INTERVAL '1 day');
-
-CREATE INDEX ix_click_agg_minute_bucket ON analytics.click_agg_minute(bucket_minute DESC);
+-- 2. Khởi tạo Index trên bảng mẹ (Nó sẽ tự động áp dụng cho mọi partition con được sinh ra sau này)
+CREATE INDEX IF NOT EXISTS ix_click_agg_minute_bucket 
+ON analytics.click_agg_minute (bucket_minute DESC NULLS FIRST);
 
 
 CREATE TABLE analytics.click_agg_daily (
@@ -384,6 +436,7 @@ CREATE TABLE analytics.link_counters (
     updated_at                TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE INDEX ix_link_counters_top ON analytics.link_counters(total_clicks DESC);
 
 -- =========================================================
 -- PLATFORM
@@ -408,7 +461,7 @@ CREATE INDEX ix_outbox_events_aggregate   ON platform.outbox_events(aggregate_ty
 CREATE TABLE platform.idempotency_keys (
     owner_id        UUID         NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
     idempotency_key VARCHAR(120) NOT NULL,
-    request_hash    CHAR(64)     NOT NULL,
+    request_hash    VARCHAR(64)     NOT NULL,
     response_status INT,
     response_body   JSONB,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -442,3 +495,64 @@ CREATE TABLE platform.blocked_domains (
     source     VARCHAR(100),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+
+
+
+-- ---------------------------------------------------------
+-- Bảng subscriptions: Gói dịch vụ hiện tại của mỗi user
+-- Mỗi user chỉ có 1 bản ghi (1-1 với iam.users).
+-- Mặc định khi tạo user: plan = FREE, không có expires_at.
+-- Khi thanh toán thành công: plan = PRO, expires_at = +30 ngày.
+-- ---------------------------------------------------------
+CREATE TABLE billing.subscriptions (
+    user_id         UUID            PRIMARY KEY REFERENCES iam.users(id) ON DELETE CASCADE,
+    plan            VARCHAR(30)     NOT NULL DEFAULT 'FREE'
+        CHECK (plan IN ('FREE', 'PRO')),
+    status          VARCHAR(30)     NOT NULL DEFAULT 'ACTIVE'
+        CHECK (status IN ('ACTIVE', 'EXPIRED', 'CANCELLED')),
+    started_at      TIMESTAMPTZ,
+    expires_at      TIMESTAMPTZ,
+    links_used      INT             NOT NULL DEFAULT 0,
+    links_reset_at  TIMESTAMPTZ     NOT NULL DEFAULT date_trunc('month', now()),
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT now()
+);
+
+
+-- ---------------------------------------------------------
+-- Bảng payment_transactions: Lịch sử giao dịch thanh toán VNPay
+-- Mỗi lần user bấm "Nâng cấp Pro" sẽ tạo 1 bản ghi PENDING.
+-- VNPay IPN callback sẽ cập nhật status → SUCCESS / FAILED.
+-- ---------------------------------------------------------
+CREATE TABLE billing.payment_transactions (
+    id              UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID            NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
+    txn_ref         VARCHAR(100)    NOT NULL UNIQUE,
+    amount          BIGINT          NOT NULL,
+    order_info      TEXT,
+    vnp_txn_no      VARCHAR(100),
+    vnp_response_code VARCHAR(10),
+    vnp_bank_code   VARCHAR(30),
+    vnp_pay_date    VARCHAR(30),
+    status          VARCHAR(30)     NOT NULL DEFAULT 'PENDING'
+        CHECK (status IN ('PENDING', 'SUCCESS', 'FAILED')),
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_payment_transactions_user_id ON billing.payment_transactions(user_id);
+CREATE INDEX idx_payment_transactions_status  ON billing.payment_transactions(status);
+CREATE INDEX idx_payment_transactions_txn_ref ON billing.payment_transactions(txn_ref);
+
+
+-- Member cần billing:read (xem gói) và billing:manage (thanh toán)
+-- =========================================================
+
+-- billing:read = permission_id 14, billing:manage = permission_id 15
+-- member = role_id 3
+INSERT INTO iam.role_permissions (role_id, permission_id) VALUES
+    (3, 14),  -- billing:read
+    (3, 15)   -- billing:manage
+ON CONFLICT DO NOTHING;
+

@@ -1,12 +1,14 @@
 package com.ThanhND05.url_shortener.analytics.repository;
 
 import com.ThanhND05.url_shortener.analytics.entity.LinkCounter;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.List;
 
 @Repository
 public interface LinkCounterRepository extends JpaRepository<LinkCounter, Long> {
@@ -27,4 +29,14 @@ public interface LinkCounterRepository extends JpaRepository<LinkCounter, Long> 
             updated_at = now()
     """, nativeQuery = true)
     void incrementClickCount(Long linkId, Instant clickedAt);
+
+    // ── ADMIN QUERIES ────────────────────────────────────
+
+    /** Tổng clicks toàn hệ thống. */
+    @Query("SELECT COALESCE(SUM(lc.totalClicks), 0) FROM LinkCounter lc")
+    long sumTotalClicks();
+
+    /** Top N links theo total clicks (JOIN với Link entity để lấy thông tin). */
+    List<LinkCounter> findTopByOrderByTotalClicksDesc(Pageable pageable);
 }
+

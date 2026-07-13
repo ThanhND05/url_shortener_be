@@ -15,4 +15,10 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
 
     /** Kiểm tra user đã có role cụ thể chưa (trong scope global). */
     boolean existsByUserIdAndRoleIdAndScopeId(UUID userId, Long roleId, UUID scopeId);
+
+    /** Kiểm tra role có đang được gán cho user nào không — dùng trước khi xóa role. */
+    boolean existsByRoleId(Long roleId);
+
+    /** Xóa tất cả assignments của role — dùng khi xóa role (force delete). */
+    void deleteByRoleId(Long roleId);
 }

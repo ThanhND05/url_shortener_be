@@ -1,6 +1,5 @@
 package com.ThanhND05.url_shortener.iam.entity;
 
-import com.ThanhND05.url_shortener.iam.enums.SystemRole;
 import com.ThanhND05.url_shortener.iam.enums.UserStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -9,6 +8,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -17,8 +17,7 @@ import java.util.UUID;
  * Cơ chế hoạt động:
  * - Mỗi user có email duy nhất (CITEXT = case-insensitive trong PostgreSQL).
  * - password_hash: mật khẩu đã được BCrypt hash, KHÔNG BAO GIỜ lưu plain text.
- * - system_role: chỉ dùng lúc tạo user để bootstrap RBAC (gán role tương ứng).
- *   Lúc runtime, hệ thống check quyền qua bảng user_roles + role_permissions.
+ * - Vai trò (role) được quản lý hoàn toàn qua bảng user_roles + role_permissions.
  * - Soft delete: khi xóa user, set status = DELETED và deleted_at = now(),
  *   dữ liệu vẫn giữ lại để audit/recovery.
  * - created_at/updated_at: tự động fill bởi JPA Auditing.
@@ -52,15 +51,6 @@ public class User {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
-    /**
-     * Vai trò hệ thống — chỉ dùng khi TẠO user để tự động gán role RBAC.
-     * VD: SUPER_ADMIN → gán role "super_admin"; USER → gán role "member".
-     */
-    @Enumerated(EnumType.STRING)
-    @Column(name = "system_role", nullable = false, length = 30)
-    @Builder.Default
-    private SystemRole systemRole = SystemRole.USER;
-
     /** Trạng thái tài khoản: ACTIVE / LOCKED / DELETED. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
@@ -78,4 +68,8 @@ public class User {
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    @OneToMany(fetch = FetchType.EAGER)
+    @JoinColumn(name = "user_id", insertable = false, updatable = false)
+    private List<UserRole> roles;
 }

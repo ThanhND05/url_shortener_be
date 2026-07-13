@@ -1,6 +1,7 @@
 package com.ThanhND05.url_shortener.billing.controller;
 
 import com.ThanhND05.url_shortener.billing.service.BillingService;
+import com.ThanhND05.url_shortener.common.config.AppProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,13 +20,14 @@ import java.util.Map;
  * VNPay gọi 2 endpoints:
  *
  * 1. IPN (Instant Payment Notification) — Server-to-Server:
- *    GET /api/v1/billing/vnpay-ipn?vnp_TxnRef=...&vnp_ResponseCode=...&vnp_SecureHash=...
- *    → Xác nhận thanh toán thành công → Auto upgrade subscription.
- *    → PHẢI trả về JSON {"RspCode": "00", "Message": "Confirm Success"}.
+ * GET
+ * /api/v1/billing/vnpay-ipn?vnp_TxnRef=...&vnp_ResponseCode=...&vnp_SecureHash=...
+ * → Xác nhận thanh toán thành công → Auto upgrade subscription.
+ * → PHẢI trả về JSON {"RspCode": "00", "Message": "Confirm Success"}.
  *
  * 2. Return URL — User redirect về sau thanh toán:
- *    GET /api/v1/billing/vnpay-return?vnp_TxnRef=...&vnp_ResponseCode=...
- *    → Hiển thị kết quả cho user. KHÔNG cập nhật trạng thái (IPN đã làm).
+ * GET /api/v1/billing/vnpay-return?vnp_TxnRef=...&vnp_ResponseCode=...
+ * → Hiển thị kết quả cho user. KHÔNG cập nhật trạng thái (IPN đã làm).
  */
 @Slf4j
 @RestController
@@ -34,13 +36,14 @@ import java.util.Map;
 public class VnPayWebhookController {
 
     private final BillingService billingService;
+    private final AppProperties appProperties;
 
     /**
      * IPN Endpoint — VNPay gọi Server-to-Server sau khi user thanh toán.
      * Đây là endpoint QUAN TRỌNG NHẤT để xác nhận giao dịch.
      *
      * VNPay yêu cầu response format:
-     *   {"RspCode": "00", "Message": "Confirm Success"}
+     * {"RspCode": "00", "Message": "Confirm Success"}
      */
     @GetMapping("/vnpay-ipn")
     public ResponseEntity<Map<String, String>> vnpayIpn(HttpServletRequest request) {
@@ -66,20 +69,41 @@ public class VnPayWebhookController {
      * Chỉ dùng để hiển thị kết quả, trạng thái đã được IPN xử lý.
      */
     @GetMapping("/vnpay-return")
-    public ResponseEntity<Map<String, Object>> vnpayReturn(HttpServletRequest request) {
+    public ResponseEntity<Void> vnpayReturn(HttpServletRequest request) {
         Map<String, String> params = extractVnPayParams(request);
 
         boolean success = billingService.processReturnUrl(params);
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", success);
-        response.put("txnRef", params.get("vnp_TxnRef"));
-        response.put("responseCode", params.get("vnp_ResponseCode"));
-        response.put("message", success
-                ? "Thanh toán thành công! Tài khoản đã được nâng cấp lên Pro."
-                : "Thanh toán không thành công. Vui lòng thử lại.");
+        String txnRef = params.get("vnp_TxnRef");
+        String responseCode = params.get("vnp_ResponseCode");
 
-        return ResponseEntity.ok(response);
+        // Determine frontend base URL dynamically from CORS configurations
+        String allowedOrigins = appProperties.getCors().getAllowedOrigins();
+        String frontendBase = "http://localhost:3000"; // default fallback
+        if (allowedOrigins != null && !allowedOrigins.isEmpty()) {
+            String[] origins = allowedOrigins.split(",");
+            for (String origin : origins) {
+                if (origin.trim().contains("3000")) {
+                    frontendBase = origin.trim();
+                    break;
+                }
+            }
+            if (frontendBase.equals("http://localhost:3000") && origins.length > 0) {
+                frontendBase = origins[origins.length - 1].trim();
+            }
+        }
+
+        // Build redirect URL to frontend /payment-result route
+        String redirectUrl = frontendBase + "/payment-result"
+                + "?success=" + success
+                + "&txnRef=" + txnRef
+                + "&responseCode=" + responseCode;
+
+        log.info("Redirecting user after VNPay payment: success={}, redirectUrl={}", success, redirectUrl);
+
+        return ResponseEntity.status(org.springframework.http.HttpStatus.FOUND)
+                .header(org.springframework.http.HttpHeaders.LOCATION, redirectUrl)
+                .build();
     }
 
     // ── Private Helpers ─────────────────────────────────

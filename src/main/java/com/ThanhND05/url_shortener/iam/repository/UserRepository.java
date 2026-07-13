@@ -28,4 +28,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /** Lấy tất cả user chưa bị xóa (status != DELETED). */
     Page<User> findByStatusNot(UserStatus status, Pageable pageable);
+
+    // ── ADMIN QUERIES ────────────────────────────────────
+
+    /** Đếm users đăng ký sau một mốc thời gian — dùng cho admin dashboard. */
+    long countByCreatedAtAfter(java.time.Instant after);
 }
+

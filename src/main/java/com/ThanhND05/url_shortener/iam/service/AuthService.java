@@ -7,7 +7,6 @@ import com.ThanhND05.url_shortener.iam.dto.request.*;
 import com.ThanhND05.url_shortener.iam.dto.response.*;
 import com.ThanhND05.url_shortener.iam.entity.*;
 import com.ThanhND05.url_shortener.iam.enums.ScopeType;
-import com.ThanhND05.url_shortener.iam.enums.SystemRole;
 import com.ThanhND05.url_shortener.iam.enums.UserStatus;
 import com.ThanhND05.url_shortener.iam.event.UserCreatedEvent;
 import com.ThanhND05.url_shortener.iam.repository.*;
@@ -32,7 +31,7 @@ import java.util.stream.Collectors;
  * === FLOW ĐĂNG KÝ ===
  * 1. Kiểm tra email chưa tồn tại.
  * 2. Hash mật khẩu bằng BCrypt → lưu user.
- * 3. Bootstrap RBAC: gán role "member" (hoặc "super_admin" nếu system_role = SUPER_ADMIN).
+ * 3. Bootstrap RBAC: gán role "member" mặc định.
  * 4. Publish UserCreatedEvent → Platform module ghi audit log.
  * 5. Tạo token pair (access + refresh) → trả client.
  *
@@ -83,7 +82,6 @@ public class AuthService {
                 .email(request.email())
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .displayName(request.displayName())
-                .systemRole(SystemRole.USER)
                 .status(UserStatus.ACTIVE)
                 .build();
         user = userRepository.save(user);
@@ -222,13 +220,10 @@ public class AuthService {
     // ── PRIVATE HELPERS ───────────────────────────────────
 
     /**
-     * Bootstrap RBAC: gán role mặc định dựa trên system_role.
-     * USER → role "member", SUPER_ADMIN → role "super_admin".
+     * Bootstrap RBAC: gán role "member" mặc định cho user mới đăng ký.
      */
     private void bootstrapUserRole(User user) {
-        String roleName = user.getSystemRole() == SystemRole.SUPER_ADMIN
-                ? "super_admin" : "member";
-        roleRepository.findByName(roleName).ifPresent(role -> {
+        roleRepository.findByName("member").ifPresent(role -> {
             UserRole userRole = UserRole.builder()
                     .userId(user.getId())
                     .role(role)

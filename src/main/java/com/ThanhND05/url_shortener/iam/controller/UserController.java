@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -25,7 +26,10 @@ import java.util.UUID;
  *   PUT    /api/v1/users/me/password  → đổi mật khẩu.
  *
  * Endpoints cho admin (cần permission "user:manage"):
+ *   POST   /api/v1/users              → tạo tài khoản user mới.
  *   GET    /api/v1/users              → danh sách user (phân trang).
+ *   GET    /api/v1/users/{id}         → xem chi tiết user.
+ *   PUT    /api/v1/users/{id}         → chỉnh sửa thông tin user.
  *   PUT    /api/v1/users/{id}/lock    → khóa tài khoản.
  *   PUT    /api/v1/users/{id}/unlock  → mở khóa.
  */
@@ -65,6 +69,16 @@ public class UserController {
 
     // ── ADMIN: Quản lý user ───────────────────────────────
 
+    /** Tạo tài khoản user mới — chỉ super_admin. */
+    @PostMapping
+    @PreAuthorize("hasAuthority('user:manage')")
+    public ResponseEntity<ApiResponse<UserResponse>> createUser(
+            @Valid @RequestBody AdminCreateUserRequest request) {
+        UserResponse created = userService.createUser(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok(created, "Tạo tài khoản thành công."));
+    }
+
     /** Liệt kê tất cả user (phân trang) — chỉ admin. */
     @GetMapping
     @PreAuthorize("hasAuthority('user:read')")
@@ -72,6 +86,23 @@ public class UserController {
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.ok(
                 PageResponse.from(userService.listUsers(pageable))));
+    }
+
+    /** Xem chi tiết thông tin user — chỉ admin. */
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('user:read')")
+    public ResponseEntity<ApiResponse<UserResponse>> getUserById(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.getUserById(id)));
+    }
+
+    /** Chỉnh sửa thông tin user — chỉ super_admin. */
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('user:manage')")
+    public ResponseEntity<ApiResponse<UserResponse>> updateUser(
+            @PathVariable UUID id,
+            @Valid @RequestBody AdminUpdateUserRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                userService.adminUpdateUser(id, request), "Cập nhật thông tin user thành công."));
     }
 
     /** Khóa tài khoản — chỉ admin có quyền "user:manage". */
