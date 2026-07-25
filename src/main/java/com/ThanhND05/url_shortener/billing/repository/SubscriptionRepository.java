@@ -39,4 +39,14 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
         WHERE s.linksResetAt < :startOfMonth
     """)
     int resetMonthlyLinkCounters(Instant now, Instant startOfMonth);
+
+    // ── ADMIN QUERIES ────────────────────────────────────
+
+    /** Đếm users đang dùng gói Pro (active, chưa hết hạn). */
+    @Query("SELECT COUNT(s) FROM Subscription s WHERE s.plan = 'PRO' AND s.status = 'ACTIVE' AND s.expiresAt > :now")
+    long countActiveProUsers(Instant now);
+
+    /** Đếm users dùng gói Free. */
+    @Query("SELECT COUNT(s) FROM Subscription s WHERE s.plan = 'FREE'")
+    long countFreeUsers();
 }
