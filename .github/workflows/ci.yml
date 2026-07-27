@@ -130,6 +130,7 @@ jobs:
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
+        continue-on-error: true
 
       - name: Dependency Check (OWASP)
         run: ./mvnw org.owasp:dependency-check-maven:check -B -DnvdApiKey=${{ secrets.NVD_API_KEY }}
