@@ -119,7 +119,8 @@ jobs:
 
       - name: Build and push
         run: |
-          docker build -t ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ github.sha }} \
+          docker build -f Dockerfile \
+                        -t ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ github.sha }} \
                         -t ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:latest .
           docker push ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ github.sha }}
           docker push ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:latest
