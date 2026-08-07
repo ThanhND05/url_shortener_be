@@ -79,7 +79,7 @@ public class VnPayWebhookController {
 
         // Determine frontend base URL dynamically from CORS configurations
         String allowedOrigins = appProperties.getCors().getAllowedOrigins();
-        String frontendBase = "http://localhost:3000"; // default fallback
+        String frontendBase = "http://url-shortener.thanhnd.vn"; // default fallback
         if (allowedOrigins != null && !allowedOrigins.isEmpty()) {
             String[] origins = allowedOrigins.split(",");
             for (String origin : origins) {
@@ -88,7 +88,7 @@ public class VnPayWebhookController {
                     break;
                 }
             }
-            if (frontendBase.equals("http://localhost:3000") && origins.length > 0) {
+            if (frontendBase.equals("http://url-shortener.thanhnd.vn") && origins.length > 0) {
                 frontendBase = origins[origins.length - 1].trim();
             }
         }

@@ -29,7 +29,7 @@ public class AppProperties {
     @Getter
     @Setter
     public static class Cors {
-        private String allowedOrigins = "http://localhost:3000";
+        private String allowedOrigins = "http://url-shortener.thanhnd.vn";
     }
 
     /**
@@ -44,6 +44,6 @@ public class AppProperties {
         private String tmnCode = "NZCRQJ6U";
         private String hashSecret = "Q4K67KVGHMSZK5DKM3RHXPEM2U185SHD";
         private String payUrl = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
-        private String returnUrl = "http://localhost:8080/api/v1/billing/vnpay-return";
+        private String returnUrl = "http://api-url-shortener.thanhnd.vn/api/v1/billing/vnpay-return";
     }
 }

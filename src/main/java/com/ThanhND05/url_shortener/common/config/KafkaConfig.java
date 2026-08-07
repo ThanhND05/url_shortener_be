@@ -46,9 +46,14 @@ import org.springframework.kafka.core.ProducerFactory;
  * - click-events: Lượt click link → ClickEventConsumer batch insert.
  * - audit-events: Audit log actions → AuditLogConsumer batch insert.
  */
+import org.springframework.beans.factory.annotation.Value;
+
 @Configuration
 @EnableKafka
 public class KafkaConfig {
+
+    @Value("${spring.kafka.bootstrap-servers}")
+    private String bootstrapServers;
 
     // Topic names — dùng constant để đảm bảo nhất quán giữa Producer/Consumer
     public static final String TOPIC_CLICK_EVENTS = "click-events";
@@ -100,8 +105,8 @@ public class KafkaConfig {
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
         Map<String, Object> configProps = new HashMap<>();
-        // Địa chỉ máy chủ Kafka (mặc định là localhost:9092)
-        configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        // Địa chỉ máy chủ Kafka
+        configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
 
         // Cấu hình Serializer: Key là String, Value (Event) sẽ được parse ra JSON
         configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
@@ -120,7 +125,7 @@ public class KafkaConfig {
         Map<String, Object> configProps = new HashMap<>();
 
         // Địa chỉ Kafka Broker
-        configProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        configProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
 
         // Cấu hình Group ID mặc định (hoặc có thể điều chỉnh lại theo dự án)
         configProps.put(ConsumerConfig.GROUP_ID_CONFIG, "url-shortener-group");
