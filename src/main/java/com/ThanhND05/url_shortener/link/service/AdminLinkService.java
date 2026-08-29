@@ -1,8 +1,6 @@
 package com.ThanhND05.url_shortener.link.service;
 
 import com.ThanhND05.url_shortener.common.exception.*;
-import com.ThanhND05.url_shortener.iam.entity.User;
-import com.ThanhND05.url_shortener.iam.repository.UserRepository;
 import com.ThanhND05.url_shortener.link.dto.request.AdminUpdateLinkStatusRequest;
 import com.ThanhND05.url_shortener.link.dto.response.AdminLinkResponse;
 import com.ThanhND05.url_shortener.link.entity.Link;
@@ -10,8 +8,9 @@ import com.ThanhND05.url_shortener.link.enums.LinkStatus;
 import com.ThanhND05.url_shortener.link.repository.LinkRepository;
 import com.ThanhND05.url_shortener.link.repository.LinkSpecifications;
 import com.ThanhND05.url_shortener.link.repository.RedirectLookupRepository;
-import com.ThanhND05.url_shortener.analytics.repository.LinkCounterRepository;
-import com.ThanhND05.url_shortener.analytics.entity.LinkCounter;
+import com.ThanhND05.url_shortener.iam.api.IamPublicApi;
+import com.ThanhND05.url_shortener.analytics.api.AnalyticsPublicApi;
+import com.ThanhND05.url_shortener.analytics.api.dto.LinkCounterApiDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -47,9 +46,9 @@ import java.util.stream.Collectors;
 public class AdminLinkService {
 
     private final LinkRepository linkRepository;
-    private final UserRepository userRepository;
+    private final IamPublicApi iamPublicApi;
     private final RedirectLookupRepository redirectLookupRepository;
-    private final LinkCounterRepository linkCounterRepository;
+    private final AnalyticsPublicApi analyticsPublicApi;
 
     // ── TÌM KIẾM / DANH SÁCH ────────────────────────────
 
@@ -89,16 +88,16 @@ public class AdminLinkService {
         // Batch-load: thu thập tất cả ownerIds và linkIds một lần
         List<Link> links = linkPage.getContent();
         Map<UUID, String> ownerEmailMap = batchLoadOwnerEmails(links);
-        Map<Long, LinkCounter> counterMap = batchLoadCounters(links);
+        Map<Long, LinkCounterApiDto> counterMap = batchLoadCounters(links);
 
         List<AdminLinkResponse> responses = links.stream()
                 .map(link -> {
                     String ownerEmail = link.getOwnerId() != null
                             ? ownerEmailMap.get(link.getOwnerId())
                             : null;
-                    LinkCounter counter = counterMap.get(link.getId());
-                    long clicks = counter != null ? counter.getTotalClicks() : 0;
-                    Instant lastClicked = counter != null ? counter.getLastClickedAt() : null;
+                    LinkCounterApiDto counter = counterMap.get(link.getId());
+                    long clicks = counter != null ? counter.totalClicks() : 0;
+                    Instant lastClicked = counter != null ? counter.lastClickedAt() : null;
                     return AdminLinkResponse.from(link, ownerEmail, clicks, lastClicked);
                 })
                 .toList();
@@ -216,14 +215,12 @@ public class AdminLinkService {
     private AdminLinkResponse toAdminResponse(Link link) {
         String ownerEmail = null;
         if (link.getOwnerId() != null) {
-            ownerEmail = userRepository.findById(link.getOwnerId())
-                    .map(User::getEmail)
-                    .orElse(null);
+            ownerEmail = iamPublicApi.getUserEmail(link.getOwnerId());
         }
 
-        var counter = linkCounterRepository.findById(link.getId()).orElse(null);
-        long clicks = counter != null ? counter.getTotalClicks() : 0;
-        Instant lastClicked = counter != null ? counter.getLastClickedAt() : null;
+        var counter = analyticsPublicApi.getCounterByLinkId(link.getId());
+        long clicks = counter != null ? counter.totalClicks() : 0;
+        Instant lastClicked = counter != null ? counter.lastClickedAt() : null;
 
         return AdminLinkResponse.from(link, ownerEmail, clicks, lastClicked);
     }
@@ -240,23 +237,21 @@ public class AdminLinkService {
 
         if (ownerIds.isEmpty()) return Map.of();
 
-        return userRepository.findAllById(ownerIds).stream()
-                .collect(Collectors.toMap(User::getId, User::getEmail));
+        return iamPublicApi.getUserEmails(ownerIds);
     }
 
     /**
      * Batch-load click counters cho danh sách links.
      * 1 query thay vì N queries → tránh N+1.
      */
-    private Map<Long, LinkCounter> batchLoadCounters(List<Link> links) {
+    private Map<Long, LinkCounterApiDto> batchLoadCounters(List<Link> links) {
         List<Long> linkIds = links.stream()
                 .map(Link::getId)
                 .toList();
 
         if (linkIds.isEmpty()) return Map.of();
 
-        return linkCounterRepository.findAllById(linkIds).stream()
-                .collect(Collectors.toMap(LinkCounter::getLinkId, Function.identity()));
+        return analyticsPublicApi.getCountersByLinkIds(linkIds);
     }
 
     /** Sync link status sang redirect_lookup. */

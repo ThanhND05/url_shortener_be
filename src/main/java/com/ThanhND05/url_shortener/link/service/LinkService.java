@@ -1,5 +1,6 @@
 package com.ThanhND05.url_shortener.link.service;
 
+import com.ThanhND05.url_shortener.billing.service.BillingService;
 import com.ThanhND05.url_shortener.common.exception.*;
 import com.ThanhND05.url_shortener.common.util.HashUtil;
 import com.ThanhND05.url_shortener.link.dto.request.*;
@@ -52,11 +53,16 @@ public class LinkService {
     private final ShortCodeGenerator shortCodeGenerator;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final BillingService billingService;
 
     // ── TẠO LINK ──────────────────────────────────────────
 
     @Transactional
     public LinkResponse createLink(UUID ownerId, CreateLinkRequest request) {
+        // 0. Kiểm tra giới hạn tính năng (custom domain)
+        if (request.domainId() != null) {
+            billingService.enforceProFeature(ownerId, "Custom Domains");
+        }
         // 1. Resolve domain
         Domain domain = resolveDomain(ownerId, request.domainId());
 
@@ -106,7 +112,10 @@ public class LinkService {
             link.setTags(tags);
         }
 
+        // 5.5. Kiểm tra giới hạn tạo link (quota)
+        billingService.enforceCreateLinkQuota(ownerId);
         link = linkRepository.save(link);
+        billingService.incrementLinkUsage(ownerId);
 
         // 6. Sync redirect_lookup
         syncRedirectLookup(link, domain);
@@ -194,6 +203,7 @@ public class LinkService {
 
     @Transactional
     public LinkRuleResponse addRule(UUID publicId, CreateLinkRuleRequest request, UUID ownerId) {
+        billingService.enforceProFeature(ownerId, "Link Routing Rules");
         Link link = findOwnedLink(publicId, ownerId);
         LinkRule rule = LinkRule.builder()
                 .linkId(link.getId())

@@ -7,8 +7,7 @@ import com.ThanhND05.url_shortener.billing.entity.PaymentTransaction;
 import com.ThanhND05.url_shortener.billing.enums.PaymentStatus;
 import com.ThanhND05.url_shortener.billing.repository.PaymentTransactionRepository;
 import com.ThanhND05.url_shortener.billing.repository.SubscriptionRepository;
-import com.ThanhND05.url_shortener.iam.entity.User;
-import com.ThanhND05.url_shortener.iam.repository.UserRepository;
+import com.ThanhND05.url_shortener.iam.api.IamPublicApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
@@ -43,7 +42,7 @@ public class AdminBillingService {
 
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final SubscriptionRepository subscriptionRepository;
-    private final UserRepository userRepository;
+    private final IamPublicApi iamPublicApi;
 
     // ── OVERVIEW ──────────────────────────────────────────
 
@@ -166,9 +165,7 @@ public class AdminBillingService {
     private Map<UUID, String> resolveUserEmails(Set<UUID> userIds) {
         if (userIds.isEmpty()) return Map.of();
 
-        List<User> users = userRepository.findAllById(userIds);
-        return users.stream()
-                .collect(Collectors.toMap(User::getId, User::getEmail));
+        return iamPublicApi.getUserEmails(userIds);
     }
 
     private AdminPaymentTransactionResponse toAdminResponse(

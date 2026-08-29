@@ -3,12 +3,9 @@ package com.ThanhND05.url_shortener.analytics.service;
 import com.ThanhND05.url_shortener.analytics.dto.response.*;
 import com.ThanhND05.url_shortener.analytics.entity.LinkCounter;
 import com.ThanhND05.url_shortener.analytics.repository.*;
-import com.ThanhND05.url_shortener.iam.entity.User;
-import com.ThanhND05.url_shortener.iam.repository.UserRepository;
-import com.ThanhND05.url_shortener.link.entity.Link;
-import com.ThanhND05.url_shortener.link.entity.Tag;
-import com.ThanhND05.url_shortener.link.enums.LinkStatus;
-import com.ThanhND05.url_shortener.link.repository.LinkRepository;
+import com.ThanhND05.url_shortener.iam.api.IamPublicApi;
+import com.ThanhND05.url_shortener.link.api.LinkPublicApi;
+import com.ThanhND05.url_shortener.link.api.dto.LinkApiDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
@@ -43,8 +40,8 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class AdminAnalyticsService {
 
-    private final LinkRepository linkRepository;
-    private final UserRepository userRepository;
+    private final LinkPublicApi linkPublicApi;
+    private final IamPublicApi iamPublicApi;
     private final LinkCounterRepository linkCounterRepository;
     private final ClickEventRepository clickEventRepository;
     private final ClickAggDailyRepository clickAggDailyRepository;
@@ -65,14 +62,14 @@ public class AdminAnalyticsService {
         Instant last30Days = now.minus(30, ChronoUnit.DAYS);
 
         // Lifetime totals
-        long totalLinks = linkRepository.countByStatusNot(LinkStatus.DELETED);
+        long totalLinks = linkPublicApi.countLinksByStatusNotDeleted();
         long totalClicks = linkCounterRepository.sumTotalClicks();
-        long totalUsers = userRepository.count();
+        long totalUsers = iamPublicApi.countTotalUsers();
 
         // Links created in periods
-        long linksToday = linkRepository.countByCreatedAtBetween(startOfToday, now);
-        long linksLast7Days = linkRepository.countByCreatedAtBetween(last7Days, now);
-        long linksLast30Days = linkRepository.countByCreatedAtBetween(last30Days, now);
+        long linksToday = linkPublicApi.countLinksCreatedBetween(startOfToday, now);
+        long linksLast7Days = linkPublicApi.countLinksCreatedBetween(last7Days, now);
+        long linksLast30Days = linkPublicApi.countLinksCreatedBetween(last30Days, now);
 
         // Clicks in periods
         long clicksToday = clickEventRepository.countByOccurredAtBetween(startOfToday, now);
@@ -80,15 +77,15 @@ public class AdminAnalyticsService {
         long clicksLast30Days = clickEventRepository.countByOccurredAtBetween(last30Days, now);
 
         // Users registered in periods
-        long usersToday = userRepository.countByCreatedAtAfter(startOfToday);
-        long usersLast7Days = userRepository.countByCreatedAtAfter(last7Days);
-        long usersLast30Days = userRepository.countByCreatedAtAfter(last30Days);
+        long usersToday = iamPublicApi.countUsersCreatedAfter(startOfToday);
+        long usersLast7Days = iamPublicApi.countUsersCreatedAfter(last7Days);
+        long usersLast30Days = iamPublicApi.countUsersCreatedAfter(last30Days);
 
         // Link status breakdown
-        long activeLinks = linkRepository.countByStatus(LinkStatus.ACTIVE);
-        long disabledLinks = linkRepository.countByStatus(LinkStatus.DISABLED);
-        long quarantinedLinks = linkRepository.countByStatus(LinkStatus.QUARANTINED);
-        long expiredLinks = linkRepository.countByStatus(LinkStatus.EXPIRED);
+        long activeLinks = linkPublicApi.countLinksByStatus("ACTIVE");
+        long disabledLinks = linkPublicApi.countLinksByStatus("DISABLED");
+        long quarantinedLinks = linkPublicApi.countLinksByStatus("QUARANTINED");
+        long expiredLinks = linkPublicApi.countLinksByStatus("EXPIRED");
 
         // Top 10 links (đã tối ưu batch-load bên trong)
         List<TopLinkResponse> topLinks = getTopLinksInternal(10);
@@ -142,46 +139,40 @@ public class AdminAnalyticsService {
         List<Long> linkIds = topCounters.stream()
                 .map(LinkCounter::getLinkId)
                 .toList();
-        Map<Long, Link> linkMap = linkRepository.findAllById(linkIds).stream()
-                .collect(Collectors.toMap(Link::getId, Function.identity()));
+        Map<Long, LinkApiDto> linkMap = linkPublicApi.getLinksByIds(linkIds);
 
         // Batch-load users (1 query)
         Set<UUID> ownerIds = linkMap.values().stream()
-                .map(Link::getOwnerId)
+                .map(LinkApiDto::ownerId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Map<UUID, String> ownerEmailMap = ownerIds.isEmpty()
-                ? Map.of()
-                : userRepository.findAllById(ownerIds).stream()
-                        .collect(Collectors.toMap(User::getId, User::getEmail));
+        Map<UUID, String> ownerEmailMap = iamPublicApi.getUserEmails(ownerIds);
 
         // Map in-memory
         return topCounters.stream()
                 .map(counter -> {
-                    Link link = linkMap.get(counter.getLinkId());
-                    if (link == null || link.getStatus() == LinkStatus.DELETED) return null;
+                    LinkApiDto link = linkMap.get(counter.getLinkId());
+                    if (link == null || "DELETED".equals(link.status())) return null;
 
-                    String ownerEmail = link.getOwnerId() != null
-                            ? ownerEmailMap.get(link.getOwnerId())
+                    String ownerEmail = link.ownerId() != null
+                            ? ownerEmailMap.get(link.ownerId())
                             : null;
 
-                    Set<String> tagNames = link.getTags().stream()
-                            .map(Tag::getName)
-                            .collect(Collectors.toSet());
+                    Set<String> tagNames = link.tags();
 
                     return TopLinkResponse.builder()
-                            .publicId(link.getPublicId())
-                            .shortCode(link.getShortCode())
-                            .originalUrl(link.getOriginalUrl())
-                            .title(link.getTitle())
+                            .publicId(link.publicId())
+                            .shortCode(link.shortCode())
+                            .originalUrl(link.originalUrl())
+                            .title(link.title())
                             .ownerEmail(ownerEmail)
-                            .status(link.getStatus().name())
-                            .redirectType(link.getRedirectType())
+                            .status(link.status())
+                            .redirectType(link.redirectType())
                             .totalClicks(counter.getTotalClicks())
                             .uniqueVisitors(counter.getUniqueVisitorsEstimate())
                             .lastClickedAt(counter.getLastClickedAt())
                             .tags(tagNames)
-                            .createdAt(link.getCreatedAt())
+                            .createdAt(link.createdAt())
                             .build();
                 })
                 .filter(Objects::nonNull)
