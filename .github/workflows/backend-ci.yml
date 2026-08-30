@@ -70,6 +70,7 @@ jobs:
       contents: read
       packages: write
       security-events: write   # cần để upload SARIF lên Security tab
+      actions: read            # cần để upload-sarif lấy context workflow
 
     steps:
       - uses: actions/checkout@v4
