@@ -294,7 +294,6 @@ CREATE TABLE link.domains (
 id                 BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 public_id          UUID        NOT NULL UNIQUE DEFAULT gen_random_uuid(),
 
-```
 -- Cross-schema reference to iam.users is intentionally
 -- application-managed to reduce database coupling.
 owner_id           UUID,
@@ -307,7 +306,6 @@ verification_token TEXT,
 verified_at        TIMESTAMPTZ,
 created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
 updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
-```
 
 );
 
@@ -351,7 +349,6 @@ CREATE TABLE link.links (
 id                         BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 public_id                  UUID        NOT NULL UNIQUE DEFAULT gen_random_uuid(),
 
-```
 -- Cross-schema reference to iam.users is intentionally
 -- application-managed to reduce database coupling.
 owner_id                   UUID,
@@ -405,7 +402,6 @@ CONSTRAINT ck_links_date_range
         OR expires_at IS NULL
         OR starts_at < expires_at
     )
-```
 
 );
 
@@ -494,14 +490,12 @@ ON link.link_rules(link_id, priority);
 CREATE TABLE link.tags (
 id         BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
-```
 -- Cross-schema reference to iam.users is intentionally
 -- application-managed to reduce database coupling.
 owner_id   UUID        NOT NULL,
 
 name       VARCHAR(80) NOT NULL,
 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-```
 
 );
 
@@ -548,10 +542,8 @@ http_status                SMALLINT,
 latency_ms                 INTEGER,
 metadata                   JSONB           NOT NULL DEFAULT '{}'::jsonb,
 
-```
 CONSTRAINT click_events_pkey
     PRIMARY KEY (occurred_at, event_id)
-```
 
 ) PARTITION BY RANGE (occurred_at);
 
@@ -594,10 +586,8 @@ device_counts    JSONB                       NOT NULL DEFAULT '{}'::jsonb,
 referrer_counts  JSONB                       NOT NULL DEFAULT '{}'::jsonb,
 updated_at       TIMESTAMP WITH TIME ZONE    NOT NULL DEFAULT now(),
 
-```
 CONSTRAINT click_agg_minute_pkey
     PRIMARY KEY (link_id, bucket_minute)
-```
 
 ) PARTITION BY RANGE (bucket_minute);
 
@@ -684,7 +674,6 @@ CREATE TABLE platform.idempotency_keys (
 -- Cross-schema user reference is application-managed.
 owner_id        UUID         NOT NULL,
 
-```
 idempotency_key VARCHAR(120) NOT NULL,
 request_hash    VARCHAR(64)  NOT NULL,
 response_status INT,
@@ -693,7 +682,6 @@ created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
 expires_at      TIMESTAMPTZ  NOT NULL,
 
 PRIMARY KEY (owner_id, idempotency_key)
-```
 
 );
 
@@ -709,7 +697,6 @@ ON platform.idempotency_keys(expires_at);
 CREATE TABLE platform.audit_logs (
 id              BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
-```
 -- Cross-schema reference to iam.users is application-managed.
 actor_id        UUID,
 
@@ -720,7 +707,6 @@ ip_hash         BYTEA,
 user_agent_hash BYTEA,
 metadata        JSONB       NOT NULL DEFAULT '{}',
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-```
 
 );
 
@@ -844,7 +830,6 @@ VALUES
 CREATE TABLE billing.subscriptions (
 user_id         UUID            PRIMARY KEY,
 
-```
 plan            VARCHAR(30)     NOT NULL DEFAULT 'FREE'
     CHECK (plan IN ('FREE', 'PRO')),
 
@@ -857,7 +842,6 @@ links_used      INT             NOT NULL DEFAULT 0,
 links_reset_at  TIMESTAMPTZ     NOT NULL DEFAULT date_trunc('month', now()),
 created_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
 updated_at      TIMESTAMPTZ     NOT NULL DEFAULT now()
-```
 
 );
 
@@ -874,7 +858,6 @@ CREATE TABLE billing.payment_transactions (
 id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
 user_id           UUID         NOT NULL,
 
-```
 txn_ref           VARCHAR(100)  NOT NULL UNIQUE,
 amount            BIGINT        NOT NULL,
 order_info        TEXT,
@@ -888,7 +871,6 @@ status            VARCHAR(30)   NOT NULL DEFAULT 'PENDING'
 
 created_at        TIMESTAMPTZ   NOT NULL DEFAULT now(),
 updated_at        TIMESTAMPTZ   NOT NULL DEFAULT now()
-```
 
 );
 
