@@ -18,6 +18,8 @@ public class AppProperties {
     private final Cors cors = new Cors();
     private final VnPay vnpay = new VnPay();
 
+    private String frontendUrl = "http://localhost:3000";
+
     @Getter
     @Setter
     public static class Jwt {

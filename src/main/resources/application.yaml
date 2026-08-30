@@ -5,8 +5,8 @@ spring:
   # ── DataSource ──────────────────────────────────────────
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:url-shortener}
-    username: postgres
-    password: thanh
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:thanh}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
@@ -72,8 +72,9 @@ server:
 
 # ── App Custom Properties ─────────────────────────────
 app:
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
   jwt:
-    secret: url-shortener-jwt-secret-key-change-this-in-production-2026-thanhnd05
+    secret: ${JWT_SECRET:url-shortener-jwt-secret-key-change-this-in-production-2026-thanhnd05}
     access-token-expiration-ms: 900000        # 15 phút
     refresh-token-expiration-ms: 604800000    # 7 ngày
   admin:
@@ -84,8 +85,8 @@ app:
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://url-shortener.thanhnd.vn}
   vnpay:
-    tmn-code: NZCRQJ6U                  # Thay bằng mã từ VNPay Sandbox
-    hash-secret: Q4K67KVGHMSZK5DKM3RHXPEM2U185SHD            # Thay bằng secret từ VNPay Sandbox
+    tmn-code: ${VNPAY_TMN_CODE:NZCRQJ6U}                  # Thay bằng mã từ VNPay Sandbox
+    hash-secret: ${VNPAY_HASH_SECRET:Q4K67KVGHMSZK5DKM3RHXPEM2U185SHD}            # Thay bằng secret từ VNPay Sandbox
     pay-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
     return-url: ${VNPAY_RETURN_URL:http://api-url-shortener.thanhnd.vn/api/v1/billing/vnpay-return}
 

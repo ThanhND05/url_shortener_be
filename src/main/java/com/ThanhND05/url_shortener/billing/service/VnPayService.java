@@ -19,8 +19,8 @@ import java.util.stream.Collectors;
 
 /**
  * Service xử lý tích hợp VNPay:
- *   - Tạo Payment URL (redirect user tới cổng VNPay)
- *   - Verify checksum (xác thực IPN/Return từ VNPay)
+ * - Tạo Payment URL (redirect user tới cổng VNPay)
+ * - Verify checksum (xác thực IPN/Return từ VNPay)
  *
  * === Quy trình tạo Payment URL ===
  * 1. Tập hợp các tham số bắt buộc (vnp_TmnCode, vnp_Amount, vnp_TxnRef, ...).
@@ -45,8 +45,7 @@ public class VnPayService {
     private static final String VNP_LOCALE = "vn";
     private static final String VNP_ORDER_TYPE = "other";
 
-    private static final DateTimeFormatter VNP_DATE_FORMAT =
-            DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private static final DateTimeFormatter VNP_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final AppProperties appProperties;
 
@@ -139,8 +138,8 @@ public class VnPayService {
 
     private String buildQueryString(Map<String, String> params) {
         return params.entrySet().stream()
-                .map(e -> URLEncoder.encode(e.getKey(), StandardCharsets.US_ASCII)
-                        + "=" + URLEncoder.encode(e.getValue(), StandardCharsets.US_ASCII))
+                .map(e -> URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8)
+                        + "=" + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8))
                 .collect(Collectors.joining("&"));
     }
 
@@ -157,7 +156,8 @@ public class VnPayService {
             StringBuilder hexString = new StringBuilder();
             for (byte b : hash) {
                 String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) hexString.append('0');
+                if (hex.length() == 1)
+                    hexString.append('0');
                 hexString.append(hex);
             }
             return hexString.toString();

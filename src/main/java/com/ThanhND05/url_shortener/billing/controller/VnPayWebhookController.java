@@ -77,21 +77,8 @@ public class VnPayWebhookController {
         String txnRef = params.get("vnp_TxnRef");
         String responseCode = params.get("vnp_ResponseCode");
 
-        // Determine frontend base URL dynamically from CORS configurations
-        String allowedOrigins = appProperties.getCors().getAllowedOrigins();
-        String frontendBase = "http://url-shortener.thanhnd.vn"; // default fallback
-        if (allowedOrigins != null && !allowedOrigins.isEmpty()) {
-            String[] origins = allowedOrigins.split(",");
-            for (String origin : origins) {
-                if (origin.trim().contains("3000")) {
-                    frontendBase = origin.trim();
-                    break;
-                }
-            }
-            if (frontendBase.equals("http://url-shortener.thanhnd.vn") && origins.length > 0) {
-                frontendBase = origins[origins.length - 1].trim();
-            }
-        }
+        // Determine frontend base URL from configuration
+        String frontendBase = appProperties.getFrontendUrl();
 
         // Build redirect URL to frontend /payment-result route
         String redirectUrl = frontendBase + "/payment-result"

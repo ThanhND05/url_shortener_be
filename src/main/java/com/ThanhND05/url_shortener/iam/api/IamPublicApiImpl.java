@@ -38,4 +38,10 @@ public class IamPublicApiImpl implements IamPublicApi {
     public long countUsersCreatedAfter(Instant time) {
         return userRepository.countByCreatedAtAfter(time);
     }
+
+    @Override
+    public boolean checkUserExists(UUID userId) {
+        if (userId == null) return false;
+        return userRepository.existsById(userId);
+    }
 }

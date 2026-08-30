@@ -10,4 +10,5 @@ public interface IamPublicApi {
     String getUserEmail(UUID userId);
     long countTotalUsers();
     long countUsersCreatedAfter(Instant time);
+    boolean checkUserExists(UUID userId);
 }
