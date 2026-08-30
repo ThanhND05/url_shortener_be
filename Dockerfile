@@ -25,6 +25,9 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
+# Upgrade base OS packages to fix Trivy CRITICAL vulnerabilities
+RUN apk update && apk upgrade --no-cache
+
 # Chạy application bằng non-root user
 RUN addgroup -S spring && adduser -S spring -G spring
 USER spring
