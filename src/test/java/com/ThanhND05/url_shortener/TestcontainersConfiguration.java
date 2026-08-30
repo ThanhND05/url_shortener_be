@@ -22,4 +22,10 @@ public class TestcontainersConfiguration {
 		return new GenericContainer<>(DockerImageName.parse("redis:latest")).withExposedPorts(6379);
 	}
 
+	@Bean
+	public com.fasterxml.jackson.databind.ObjectMapper objectMapper() {
+		return new com.fasterxml.jackson.databind.ObjectMapper()
+				.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+	}
+
 }
