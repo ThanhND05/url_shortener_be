@@ -173,6 +173,9 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --port 8080 \
+            --memory 1024Mi \
+            --cpu 2 \
+            --timeout 600 \
             --network default \
             --subnet default \
             --vpc-egress private-ranges-only \
