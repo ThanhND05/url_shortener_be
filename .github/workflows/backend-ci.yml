@@ -186,7 +186,8 @@ jobs:
             --set-env-vars "SPRING_DATA_REDIS_HOST=${{ secrets.REDIS_HOST }}" \
             --set-env-vars "SPRING_DATA_REDIS_PORT=6379" \
             --set-env-vars "SPRING_KAFKA_BOOTSTRAP_SERVERS=${{ secrets.KAFKA_HOST }}:9092" \
-            --set-env-vars "FRONTEND_URL=${{ secrets.FRONTEND_URL }}"
+            --set-env-vars "FRONTEND_URL=${{ secrets.FRONTEND_URL }}" \
+            --set-env-vars "ALLOWED_ORIGINS=${{ secrets.FRONTEND_URL }}"
 
       - name: Fetch Cloud Run Logs (If Deploy Fails)
         if: failure()
