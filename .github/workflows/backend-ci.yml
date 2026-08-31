@@ -192,9 +192,10 @@ jobs:
         if: failure()
         run: |
           echo "========================================================"
-          echo "🚨 CLOUD RUN DEPLOYMENT FAILED! FETCHING APP LOGS... 🚨"
+          echo "🚨 CLOUD RUN DEPLOYMENT FAILED! WAITING FOR LOGS... 🚨"
           echo "========================================================"
+          sleep 15
           gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="url-shortener-backend" AND severity>=DEFAULT' \
             --project "$(gcloud config get-value project)" \
-            --limit 100 \
+            --limit 200 \
             --format="table(timestamp, severity, textPayload)"
