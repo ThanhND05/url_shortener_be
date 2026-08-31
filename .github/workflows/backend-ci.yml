@@ -162,8 +162,8 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
-          # Tính toán lại tên image từ GHCR (ghcr.io/thanhnd05/url_shortener_be:sha-xxxx)
-          IMAGE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]'):sha-$(echo '${{ github.sha }}' | cut -c1-7)"
+          # Tính toán lại tên image từ GHCR (ghcr.io/thanhnd05/url_shortener_be:xxxx)
+          IMAGE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]'):$(echo '${{ github.sha }}' | cut -c1-7)"
           
           # Deploy lên Cloud Run
           # Lưu ý: Sử dụng Direct VPC Egress (--network) để App có thể gọi được tới Redis (IP nội bộ)
