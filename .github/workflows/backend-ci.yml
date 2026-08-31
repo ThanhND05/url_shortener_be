@@ -187,3 +187,14 @@ jobs:
             --set-env-vars "SPRING_DATA_REDIS_PORT=6379" \
             --set-env-vars "SPRING_KAFKA_BOOTSTRAP_SERVERS=${{ secrets.KAFKA_HOST }}:9092" \
             --set-env-vars "FRONTEND_URL=https://url-shortener.thanhnd.vn"
+
+      - name: Fetch Cloud Run Logs (If Deploy Fails)
+        if: failure()
+        run: |
+          echo "========================================================"
+          echo "🚨 CLOUD RUN DEPLOYMENT FAILED! FETCHING APP LOGS... 🚨"
+          echo "========================================================"
+          gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="url-shortener-backend" AND severity>=DEFAULT' \
+            --project "$(gcloud config get-value project)" \
+            --limit 100 \
+            --format="table(timestamp, severity, textPayload)"
