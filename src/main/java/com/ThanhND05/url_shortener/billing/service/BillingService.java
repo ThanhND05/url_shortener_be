@@ -26,11 +26,11 @@ import java.util.UUID;
 
 /**
  * Service xử lý business logic cho Billing:
- *   - Xem gói hiện tại
- *   - Tạo payment → lấy URL VNPay
- *   - Xử lý IPN callback → upgrade subscription
- *   - Kiểm tra quota link (enforced khi tạo link)
- *   - Scheduled jobs: expire subscriptions, reset monthly counters
+ * - Xem gói hiện tại
+ * - Tạo payment → lấy URL VNPay
+ * - Xử lý IPN callback → upgrade subscription
+ * - Kiểm tra quota link (enforced khi tạo link)
+ * - Scheduled jobs: expire subscriptions, reset monthly counters
  *
  * === GÓI DỊCH VỤ ===
  * FREE: 50 links/tháng, analytics 7 ngày, không có Link Rules/Custom Domain.
@@ -110,8 +110,7 @@ public class BillingService {
         String paymentUrl = vnPayService.createPaymentUrl(
                 txnRef, PRO_PRICE_VND,
                 "Nang cap goi Pro - URL Shortener",
-                ipAddress
-        );
+                ipAddress);
 
         log.info("Created payment for user {} with txnRef={}", userId, txnRef);
 
@@ -125,7 +124,8 @@ public class BillingService {
      * Xử lý IPN callback từ VNPay (Server-to-Server).
      *
      * @param params tất cả params VNPay gửi về
-     * @return response code: "00" = OK, "97" = checksum fail, "02" = not found, "01" = đã xử lý
+     * @return response code: "00" = OK, "97" = checksum fail, "02" = not found,
+     *         "01" = đã xử lý
      */
     @Transactional
     public String processIpnCallback(Map<String, String> params) {
@@ -230,8 +230,7 @@ public class BillingService {
         if (sub.getLinksUsed() >= FREE_LINKS_PER_MONTH) {
             throw new BusinessException(
                     "Bạn đã đạt giới hạn " + FREE_LINKS_PER_MONTH
-                    + " links/tháng của gói Free. Vui lòng nâng cấp lên Pro để tạo không giới hạn."
-            );
+                            + " links/tháng của gói Free. Vui lòng nâng cấp lên Pro để tạo không giới hạn.");
         }
     }
 
@@ -258,8 +257,7 @@ public class BillingService {
         if (!sub.isPro()) {
             throw new BusinessException(
                     "Tính năng \"" + featureName + "\" chỉ dành cho gói Pro. "
-                    + "Vui lòng nâng cấp để sử dụng."
-            );
+                            + "Vui lòng nâng cấp để sử dụng.");
         }
     }
 
