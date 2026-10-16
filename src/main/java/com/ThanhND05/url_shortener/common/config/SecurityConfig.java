@@ -63,7 +63,8 @@ public class SecurityConfig {
                 // Public: redirect short URLs
                 .requestMatchers(HttpMethod.GET, "/r/**").permitAll()
                 // Public: actuator health
-                .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/prometheus").permitAll()
+		.requestMatchers("/actuator/**").denyAll()
                 // Everything else requires authentication
                 .anyRequest().authenticated()
             )

@@ -1,0 +1,22 @@
+management:
+  server:
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+logging:
+  level:
+    com.ThanhND05.url_shortener: INFO
+    org.springframework.security: INFO
+server:
+  forward-headers-strategy: framework
