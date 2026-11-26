@@ -28,7 +28,7 @@ jobs:
         env:
           KAFKA_BOOTSTRAP_SERVERS: localhost:9092
           JWT_SECRET: ci-only-secret-at-least-32-characters-long
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-reports
@@ -82,7 +82,7 @@ jobs:
           exit-code: '0'
       - name: Upload scan evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-security
           retention-days: 14
@@ -116,7 +116,7 @@ jobs:
           printf 'Published image: `%s`\n' "$ref" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload release metadata
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-image
           retention-days: 30
