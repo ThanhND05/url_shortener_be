@@ -1,4 +1,4 @@
-name: Backend Lab CI
+name: Backend CI
 on:
   pull_request:
   push:
@@ -7,10 +7,11 @@ permissions:
   contents: read
 concurrency:
   group: backend-ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       kafka:
         image: apache/kafka:3.9.1
@@ -36,8 +37,8 @@ jobs:
             target/failsafe-reports/
   image:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -56,27 +57,70 @@ jobs:
           tags: ${{ steps.image.outputs.ref }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      - name: Save vulnerability report
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.ref }}
+          format: json
+          output: trivy-backend.json
+          exit-code: '0'
+          severity: HIGH,CRITICAL
+      - name: Enforce critical vulnerability gate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.image.outputs.ref }}
           format: table
           exit-code: '1'
           ignore-unfixed: true
           severity: CRITICAL
-      - uses: docker/login-action@v3
+      - name: Generate image SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.ref }}
+          format: cyclonedx
+          output: sbom-backend.cdx.json
+          exit-code: '0'
+      - name: Upload scan evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-security
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            trivy-backend.json
+            sbom-backend.cdx.json
+      - name: Login to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Push the scanned image without rebuilding
+      - name: Publish scanned image and record release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           IMAGE_REF: ${{ steps.image.outputs.ref }}
-        run: docker push "$IMAGE_REF"
-      - name: Record digest
-        env:
-          IMAGE_REF: ${{ steps.image.outputs.ref }}
-        run: docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE_REF" > backend-image.txt
-      - uses: actions/upload-artifact@v4
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker push "$IMAGE_REF"
+          ref=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE_REF")
+          [[ "$ref" =~ ^ghcr.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]]
+          printf '%s\n' "$ref" > backend-image.txt
+          jq -n --arg image "$ref" --arg commit "$GITHUB_SHA" \
+            --arg repository "$GITHUB_REPOSITORY" --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{image:$image,commit:$commit,repository:$repository,run_id:$run_id,run_url:$run_url}' \
+            > backend-release.json
+          printf 'Published image: `%s`\n' "$ref" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload release metadata
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
         with:
           name: backend-image
-          path: backend-image.txt
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            backend-image.txt
+            backend-release.json
